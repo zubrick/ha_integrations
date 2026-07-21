@@ -1,0 +1,12 @@
+{
+  "domain": "rss_podcast_journal",
+  "name": "Integration blueprint",
+  "codeowners": [
+    "@ludeeus"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/ludeeus/rss_podcast_journal",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/ludeeus/rss_podcast_journal/issues",
+  "version": "0.1.0"
+}
