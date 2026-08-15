@@ -1,5 +1,5 @@
 {
-    "name": "zubrick/ha_integrations",
+    "name": "zubrick/rss_podcast_journal",
     "image": "mcr.microsoft.com/devcontainers/base:debian",
     "postCreateCommand": "scripts/setup",
     "forwardPorts": [
