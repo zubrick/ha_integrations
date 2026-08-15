@@ -1,26 +1,44 @@
-"""Adds config flow for Blueprint."""
+"""Adds config flow for RSS Podcast Journal."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.loader import async_get_loaded_integration
-from slugify import slugify
 
-from .api import (
-    IntegrationBlueprintApiClient,
-    IntegrationBlueprintApiClientAuthenticationError,
-    IntegrationBlueprintApiClientCommunicationError,
-    IntegrationBlueprintApiClientError,
+from .api import RssPodcastJournalApiClient, RssPodcastJournalApiClientError
+from .const import (
+    CONF_FEEDS,
+    CONF_FILENAME,
+    DEFAULT_FEEDS,
+    DEFAULT_FILENAME,
+    DOMAIN,
+    LOGGER,
 )
-from .const import DOMAIN, LOGGER
 
 
-class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for Blueprint."""
+def _parse_feeds(raw_feeds: str) -> list[str]:
+    """Split the textarea input into a list of non-empty feed URLs."""
+    return [line.strip() for line in raw_feeds.splitlines() if line.strip()]
+
+
+def _is_valid_filename(filename: str) -> bool:
+    """
+    Return True if `filename` is a bare file name with no path components.
+
+    `hass.config.path()` joins this value with os.path.join, which silently
+    discards the config/www prefix if the value is (or contains) an absolute
+    path, e.g. "/etc/passwd". Rejecting anything but a bare name prevents
+    writing outside the www directory.
+    """
+    return filename not in ("", ".", "..") and Path(filename).name == filename
+
+
+class RssPodcastJournalFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+    """Config flow for RSS Podcast Journal."""
 
     VERSION = 1
 
@@ -29,58 +47,49 @@ class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         user_input: dict | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Handle a flow initialized by the user."""
-        _errors = {}
-        if user_input is not None:
-            try:
-                await self._test_credentials(
-                    username=user_input[CONF_USERNAME],
-                    password=user_input[CONF_PASSWORD],
-                )
-            except IntegrationBlueprintApiClientAuthenticationError as exception:
-                LOGGER.warning(exception)
-                _errors["base"] = "auth"
-            except IntegrationBlueprintApiClientCommunicationError as exception:
-                LOGGER.error(exception)
-                _errors["base"] = "connection"
-            except IntegrationBlueprintApiClientError as exception:
-                LOGGER.exception(exception)
-                _errors["base"] = "unknown"
-            else:
-                await self.async_set_unique_id(
-                    ## Do NOT use this in production code
-                    ## The unique_id should never be something that can change
-                    ## https://developers.home-assistant.io/docs/config_entries_config_flow_handler#unique-ids
-                    unique_id=slugify(user_input[CONF_USERNAME])
-                )
-                self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=user_input[CONF_USERNAME],
-                    data=user_input,
-                )
+        await self.async_set_unique_id(DOMAIN)
+        self._abort_if_unique_id_configured()
 
-        integration = async_get_loaded_integration(self.hass, DOMAIN)
-        assert integration.documentation is not None, (  # noqa: S101
-            "Integration documentation URL is not set in manifest.json"
-        )
+        _errors = {}
+        feeds: list[str] = []
+        if user_input is not None:
+            feeds = _parse_feeds(user_input[CONF_FEEDS])
+            if not feeds:
+                _errors["base"] = "no_feeds"
+            elif not _is_valid_filename(user_input[CONF_FILENAME]):
+                _errors["base"] = "invalid_filename"
+            else:
+                try:
+                    await self._test_feeds(feeds)
+                except RssPodcastJournalApiClientError as exception:
+                    LOGGER.warning(exception)
+                    _errors["base"] = "invalid_feed"
+
+            if not _errors:
+                return self.async_create_entry(
+                    title="RSS Podcast Journal",
+                    data={
+                        CONF_FEEDS: feeds,
+                        CONF_FILENAME: user_input[CONF_FILENAME],
+                    },
+                )
 
         return self.async_show_form(
             step_id="user",
-            description_placeholders={
-                "documentation_url": integration.documentation,
-            },
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_USERNAME,
-                        default=(user_input or {}).get(CONF_USERNAME, vol.UNDEFINED),
+                        CONF_FEEDS,
+                        default="\n".join(feeds or DEFAULT_FEEDS),
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(multiline=True),
+                    ),
+                    vol.Required(
+                        CONF_FILENAME,
+                        default=(user_input or {}).get(CONF_FILENAME, DEFAULT_FILENAME),
                     ): selector.TextSelector(
                         selector.TextSelectorConfig(
-                            type=selector.TextSelectorType.TEXT,
-                        ),
-                    ),
-                    vol.Required(CONF_PASSWORD): selector.TextSelector(
-                        selector.TextSelectorConfig(
-                            type=selector.TextSelectorType.PASSWORD,
+                            type=selector.TextSelectorType.TEXT
                         ),
                     ),
                 },
@@ -88,11 +97,10 @@ class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             errors=_errors,
         )
 
-    async def _test_credentials(self, username: str, password: str) -> None:
-        """Validate credentials."""
-        client = IntegrationBlueprintApiClient(
-            username=username,
-            password=password,
+    async def _test_feeds(self, feeds: list[str]) -> None:
+        """Validate that the feeds can be parsed."""
+        client = RssPodcastJournalApiClient(
+            hass=self.hass,
             session=async_get_clientsession(self.hass),
         )
-        await client.async_get_data()
+        await client.async_validate_feeds(feeds)

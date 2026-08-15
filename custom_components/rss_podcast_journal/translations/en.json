@@ -2,20 +2,26 @@
     "config": {
         "step": {
             "user": {
-                "description": "If you need help with the configuration have a look here: {documentation_url}",
+                "description": "Enter one RSS feed URL per line. The integration checks each feed, in order, for an episode published today, and the name to save the downloaded file as under /config/www/.",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "feeds": "RSS feed URLs",
+                    "filename": "Downloaded file name"
                 }
             }
         },
         "error": {
-            "auth": "Username/Password is wrong.",
-            "connection": "Unable to connect to the server.",
-            "unknown": "Unknown error occurred."
+            "no_feeds": "Enter at least one feed URL.",
+            "invalid_filename": "Enter a plain file name, with no path (e.g. journal.mp3).",
+            "invalid_feed": "Unable to parse one of the feeds."
         },
         "abort": {
             "already_configured": "This entry is already configured."
+        }
+    },
+    "services": {
+        "download_latest_episode": {
+            "name": "Download latest episode",
+            "description": "Checks the configured RSS feeds and downloads today's episode if one is available."
         }
     }
 }

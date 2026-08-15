@@ -1,138 +1,113 @@
-"""Sample API Client."""
+"""API client for rss_podcast_journal."""
 
 from __future__ import annotations
 
 import asyncio
-import math
-import socket
-from contextlib import suppress
-from http import HTTPStatus
-from typing import Any
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 import aiohttp
+import feedparser
+from homeassistant.util import dt as dt_util
+
+if TYPE_CHECKING:
+    from datetime import date
+
+    from homeassistant.core import HomeAssistant
 
 
-class IntegrationBlueprintApiClientError(Exception):
+class RssPodcastJournalApiClientError(Exception):
     """Exception to indicate a general API error."""
 
 
-class IntegrationBlueprintApiClientCommunicationError(
-    IntegrationBlueprintApiClientError,
+class RssPodcastJournalApiClientCommunicationError(
+    RssPodcastJournalApiClientError,
 ):
     """Exception to indicate a communication error."""
 
 
-class IntegrationBlueprintApiClientAuthenticationError(
-    IntegrationBlueprintApiClientError,
-):
-    """Exception to indicate an authentication error."""
+@dataclass
+class LatestEpisode:
+    """Metadata about the latest episode found for today."""
+
+    feed_url: str
+    audio_url: str
+    published: date
 
 
-class IntegrationBlueprintApiClientRateLimitError(
-    IntegrationBlueprintApiClientCommunicationError,
-):
-    """Exception to indicate the API is rate limiting us."""
-
-    def __init__(self, message: str, retry_after: int | None = None) -> None:
-        """Store the backoff period requested by the API."""
-        super().__init__(message)
-        self.retry_after = retry_after
+def _find_audio_link(entry: feedparser.FeedParserDict) -> str | None:
+    """Return the audio enclosure URL for a feed entry, if any."""
+    for link in entry.get("links", []):
+        if link.get("type") in ("audio/mpeg", "video/mp3"):
+            return link.get("href")
+    return None
 
 
-def _parse_retry_after(response: aiohttp.ClientResponse) -> int:
-    """Return the backoff period (whole seconds) from the Retry-After header."""
-    value: float | None = None
-    retry_after = response.headers.get("Retry-After")
-    if retry_after is not None:
-        with suppress(ValueError):
-            value = float(retry_after)
-    if value is not None and math.isfinite(value) and value >= 0:
-        return math.ceil(value)
-    return 60
+class RssPodcastJournalApiClient:
+    """Client that finds and downloads today's podcast episode."""
 
-
-def _verify_response_or_raise(response: aiohttp.ClientResponse) -> None:
-    """Verify that the response is valid."""
-    if response.status in (401, 403):
-        msg = "Invalid credentials"
-        raise IntegrationBlueprintApiClientAuthenticationError(
-            msg,
-        )
-    if response.status == HTTPStatus.TOO_MANY_REQUESTS:
-        msg = "Rate limited by the API"
-        raise IntegrationBlueprintApiClientRateLimitError(
-            msg,
-            retry_after=_parse_retry_after(response),
-        )
-    response.raise_for_status()
-
-
-class IntegrationBlueprintApiClient:
-    """Sample API Client."""
-
-    def __init__(
-        self,
-        username: str,
-        password: str,
-        session: aiohttp.ClientSession,
-    ) -> None:
-        """Sample API Client."""
-        self._username = username
-        self._password = password
+    def __init__(self, hass: HomeAssistant, session: aiohttp.ClientSession) -> None:
+        """Initialize the client."""
+        self._hass = hass
         self._session = session
 
-    async def async_get_data(self) -> Any:
-        """Get data from the API."""
-        return await self._api_wrapper(
-            method="get",
-            url="https://jsonplaceholder.typicode.com/posts/1",
-        )
+    async def async_validate_feeds(self, feeds: list[str]) -> None:
+        """Raise if any of the feeds cannot be parsed."""
+        for feed_url in feeds:
+            await self._async_parse_feed(feed_url)
 
-    async def async_set_title(self, value: str) -> Any:
-        """Get data from the API."""
-        return await self._api_wrapper(
-            method="patch",
-            url="https://jsonplaceholder.typicode.com/posts/1",
-            data={"title": value},
-            headers={"Content-type": "application/json; charset=UTF-8"},
-        )
-
-    async def _api_wrapper(
-        self,
-        method: str,
-        url: str,
-        data: dict | None = None,
-        headers: dict | None = None,
-    ) -> Any:
-        """Get information from the API."""
-        try:
-            async with asyncio.timeout(10):
-                response = await self._session.request(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    json=data,
+    async def async_find_todays_episode(self, feeds: list[str]) -> LatestEpisode | None:
+        """Return the first feed's episode published today, if any."""
+        today = dt_util.now().date()
+        for feed_url in feeds:
+            parsed = await self._async_parse_feed(feed_url)
+            if not parsed.entries:
+                continue
+            entry = parsed.entries[0]
+            published = entry.get("published_parsed")
+            if published is None:
+                continue
+            if (published.tm_year, published.tm_mon, published.tm_mday) != (
+                today.year,
+                today.month,
+                today.day,
+            ):
+                continue
+            audio_url = _find_audio_link(entry)
+            if audio_url is not None:
+                return LatestEpisode(
+                    feed_url=feed_url, audio_url=audio_url, published=today
                 )
-                _verify_response_or_raise(response)
-                return await response.json()
+        return None
 
+    async def async_download_episode(self, audio_url: str, destination: str) -> None:
+        """Download the audio file at `audio_url` to `destination`."""
+        try:
+            async with asyncio.timeout(30):
+                response = await self._session.get(audio_url)
+                response.raise_for_status()
+                content = await response.read()
         except TimeoutError as exception:
-            msg = f"Timeout error fetching information - {exception}"
-            raise IntegrationBlueprintApiClientCommunicationError(
-                msg,
-            ) from exception
-        except (aiohttp.ClientError, socket.gaierror) as exception:
-            msg = f"Error fetching information - {exception}"
-            raise IntegrationBlueprintApiClientCommunicationError(
-                msg,
-            ) from exception
-        except IntegrationBlueprintApiClientError:
-            # Our own typed errors (auth, rate-limit, communication) are already
-            # meaningful; re-raise so callers can branch on them instead of masking
-            # them with the broad handler below.
-            raise
-        except Exception as exception:  # pylint: disable=broad-except
-            msg = f"Something really wrong happened! - {exception}"
-            raise IntegrationBlueprintApiClientError(
-                msg,
-            ) from exception
+            msg = f"Timeout downloading episode - {exception}"
+            raise RssPodcastJournalApiClientCommunicationError(msg) from exception
+        except aiohttp.ClientError as exception:
+            msg = f"Error downloading episode - {exception}"
+            raise RssPodcastJournalApiClientCommunicationError(msg) from exception
+
+        await self._hass.async_add_executor_job(_write_file, destination, content)
+
+    async def _async_parse_feed(self, feed_url: str) -> feedparser.FeedParserDict:
+        """Parse a feed in the executor and raise on failure."""
+        parsed = await self._hass.async_add_executor_job(feedparser.parse, feed_url)
+        if parsed.bozo:
+            msg = f"Could not parse feed {feed_url} - {parsed.bozo_exception}"
+            raise RssPodcastJournalApiClientCommunicationError(msg)
+        return parsed
+
+
+def _write_file(destination: str, content: bytes) -> None:
+    """Write `content` to `destination`, creating the parent directory if needed."""
+    Path(destination).parent.mkdir(parents=True, exist_ok=True)
+    with Path(destination).open("wb") as file:
+        file.write(content)

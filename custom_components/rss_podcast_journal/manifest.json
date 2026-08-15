@@ -1,12 +1,13 @@
 {
   "domain": "rss_podcast_journal",
-  "name": "Integration blueprint",
+  "name": "RSS Podcast Journal",
   "codeowners": [
-    "@ludeeus"
+    "@zubrick"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/ludeeus/rss_podcast_journal",
+  "documentation": "https://github.com/zubrick/ha_integrations",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/ludeeus/rss_podcast_journal/issues",
+  "issue_tracker": "https://github.com/zubrick/ha_integrations/issues",
+  "requirements": ["feedparser>=6.0.10"],
   "version": "0.1.0"
 }

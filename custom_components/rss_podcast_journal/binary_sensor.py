@@ -5,37 +5,36 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.components.binary_sensor import (
-    BinarySensorDeviceClass,
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
 
-from .entity import IntegrationBlueprintEntity
+from .entity import RssPodcastJournalEntity
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .coordinator import BlueprintDataUpdateCoordinator
-    from .data import IntegrationBlueprintConfigEntry
+    from .coordinator import RssPodcastJournalDataUpdateCoordinator
+    from .data import RssPodcastJournalConfigEntry
 
 ENTITY_DESCRIPTIONS = (
     BinarySensorEntityDescription(
-        key="rss_podcast_journal",
-        name="RSS Podcast Journal Binary Sensor",
-        device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        key="episode_downloaded",
+        name="Today's Episode Downloaded",
+        icon="mdi:podcast",
     ),
 )
 
 
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
-    entry: IntegrationBlueprintConfigEntry,
+    entry: RssPodcastJournalConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the binary_sensor platform."""
     async_add_entities(
-        IntegrationBlueprintBinarySensor(
+        RssPodcastJournalBinarySensor(
             coordinator=entry.runtime_data.coordinator,
             entity_description=entity_description,
         )
@@ -43,12 +42,12 @@ async def async_setup_entry(
     )
 
 
-class IntegrationBlueprintBinarySensor(IntegrationBlueprintEntity, BinarySensorEntity):
-    """rss_podcast_journal binary_sensor class."""
+class RssPodcastJournalBinarySensor(RssPodcastJournalEntity, BinarySensorEntity):
+    """Binary sensor indicating whether today's episode has been downloaded."""
 
     def __init__(
         self,
-        coordinator: BlueprintDataUpdateCoordinator,
+        coordinator: RssPodcastJournalDataUpdateCoordinator,
         entity_description: BinarySensorEntityDescription,
     ) -> None:
         """Initialize the binary_sensor class."""
@@ -57,5 +56,5 @@ class IntegrationBlueprintBinarySensor(IntegrationBlueprintEntity, BinarySensorE
 
     @property
     def is_on(self) -> bool:
-        """Return true if the binary_sensor is on."""
-        return self.coordinator.data.get("title", "") == "foo"
+        """Return true if today's episode has been downloaded."""
+        return self.coordinator.data is not None

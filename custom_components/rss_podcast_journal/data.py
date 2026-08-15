@@ -9,17 +9,18 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.loader import Integration
 
-    from .api import IntegrationBlueprintApiClient
-    from .coordinator import BlueprintDataUpdateCoordinator
+    from .api import RssPodcastJournalApiClient
+    from .coordinator import RssPodcastJournalDataUpdateCoordinator
 
 
-type IntegrationBlueprintConfigEntry = ConfigEntry[IntegrationBlueprintData]
+type RssPodcastJournalConfigEntry = ConfigEntry[RssPodcastJournalData]
 
 
 @dataclass
-class IntegrationBlueprintData:
-    """Data for the Blueprint integration."""
+class RssPodcastJournalData:
+    """Runtime data for the RSS Podcast Journal integration."""
 
-    client: IntegrationBlueprintApiClient
-    coordinator: BlueprintDataUpdateCoordinator
+    client: RssPodcastJournalApiClient
+    coordinator: RssPodcastJournalDataUpdateCoordinator
     integration: Integration
+    destination: str

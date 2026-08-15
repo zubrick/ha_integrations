@@ -11,7 +11,9 @@ __pycache__
 .vscode
 coverage.xml
 .ruff_cache
-
+*~
+sample_data
+.claude
 
 # Home Assistant configuration
 config/*
