@@ -87,7 +87,8 @@ class RssPodcastJournalApiClient:
         return None
 
     async def async_download_episode(self, audio_url: str, destination: str) -> None:
-        """Download the audio file at `audio_url` to `destination`.
+        """
+        Download the audio file at `audio_url` to `destination`.
 
         If the download fails, the bundled fallback episode is copied to
         `destination` instead, so a file is always available there.
@@ -109,7 +110,8 @@ class RssPodcastJournalApiClient:
         await self._hass.async_add_executor_job(_write_file, destination, content)
 
     async def async_use_fallback_episode(self, destination: str) -> None:
-        """Copy the bundled fallback episode to `destination`.
+        """
+        Copy the bundled fallback episode to `destination`.
 
         Used when no episode was published today, so a file is always
         available at `destination`.
