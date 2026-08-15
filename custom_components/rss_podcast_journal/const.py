@@ -15,5 +15,6 @@ DEFAULT_FEEDS = [
     "https://www.lfm.ch/chronique/lfm-info-journal/feed/",
 ]
 DEFAULT_FILENAME = "journal.mp3"
+FALLBACK_AUDIO_FILENAME = "fallback.mp3"
 
 SERVICE_DOWNLOAD_LATEST_EPISODE = "download_latest_episode"

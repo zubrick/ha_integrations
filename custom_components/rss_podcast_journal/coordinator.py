@@ -57,6 +57,10 @@ class RssPodcastJournalDataUpdateCoordinator(
                     runtime_data.destination,
                 )
                 self._last_downloaded_date = episode.published
+            elif episode is None:
+                await runtime_data.client.async_use_fallback_episode(
+                    runtime_data.destination,
+                )
         except RssPodcastJournalApiClientError as exception:
             raise UpdateFailed(str(exception)) from exception
 

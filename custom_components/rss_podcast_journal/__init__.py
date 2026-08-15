@@ -62,6 +62,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa:
                     episode.audio_url,
                     runtime_data.destination,
                 )
+            else:
+                await runtime_data.client.async_use_fallback_episode(
+                    runtime_data.destination,
+                )
         except RssPodcastJournalApiClientError as exception:
             raise HomeAssistantError(str(exception)) from exception
 

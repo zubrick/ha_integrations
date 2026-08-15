@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,10 +12,14 @@ import aiohttp
 import feedparser
 from homeassistant.util import dt as dt_util
 
+from .const import FALLBACK_AUDIO_FILENAME
+
 if TYPE_CHECKING:
     from datetime import date
 
     from homeassistant.core import HomeAssistant
+
+FALLBACK_AUDIO_PATH = Path(__file__).parent / FALLBACK_AUDIO_FILENAME
 
 
 class RssPodcastJournalApiClientError(Exception):
@@ -82,7 +87,11 @@ class RssPodcastJournalApiClient:
         return None
 
     async def async_download_episode(self, audio_url: str, destination: str) -> None:
-        """Download the audio file at `audio_url` to `destination`."""
+        """Download the audio file at `audio_url` to `destination`.
+
+        If the download fails, the bundled fallback episode is copied to
+        `destination` instead, so a file is always available there.
+        """
         try:
             async with asyncio.timeout(30):
                 response = await self._session.get(audio_url)
@@ -90,12 +99,22 @@ class RssPodcastJournalApiClient:
                 content = await response.read()
         except TimeoutError as exception:
             msg = f"Timeout downloading episode - {exception}"
+            await self._hass.async_add_executor_job(_copy_fallback, destination)
             raise RssPodcastJournalApiClientCommunicationError(msg) from exception
         except aiohttp.ClientError as exception:
             msg = f"Error downloading episode - {exception}"
+            await self._hass.async_add_executor_job(_copy_fallback, destination)
             raise RssPodcastJournalApiClientCommunicationError(msg) from exception
 
         await self._hass.async_add_executor_job(_write_file, destination, content)
+
+    async def async_use_fallback_episode(self, destination: str) -> None:
+        """Copy the bundled fallback episode to `destination`.
+
+        Used when no episode was published today, so a file is always
+        available at `destination`.
+        """
+        await self._hass.async_add_executor_job(_copy_fallback, destination)
 
     async def _async_parse_feed(self, feed_url: str) -> feedparser.FeedParserDict:
         """Parse a feed in the executor and raise on failure."""
@@ -111,3 +130,9 @@ def _write_file(destination: str, content: bytes) -> None:
     Path(destination).parent.mkdir(parents=True, exist_ok=True)
     with Path(destination).open("wb") as file:
         file.write(content)
+
+
+def _copy_fallback(destination: str) -> None:
+    """Copy the bundled fallback episode to `destination`."""
+    Path(destination).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(FALLBACK_AUDIO_PATH, destination)

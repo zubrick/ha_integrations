@@ -24,4 +24,5 @@ class RssPodcastJournalEntity(
                     coordinator.config_entry.entry_id,
                 ),
             },
+            name=coordinator.config_entry.title,
         )
